@@ -61,7 +61,7 @@ enum
 #include <signal.h>
 #include <sys/wait.h>
 #include <syslog.h>
-#include <utmp.h>
+#include <utmpx.h>
 #include "err.h"
 #include <stdbool.h>
 #include "c.h"
@@ -73,7 +73,7 @@ enum
 #include "strutils.h"
 #include "ttyutils.h"
 
-#define SUDX_VERSION "2.29.2-1"
+#define SUDX_VERSION "2.30.1-1"
 
 /* name of the pam configuration files. separate configs for su and su -  */
 #define PAM_SRVNAME_SU_L "su-l"
@@ -96,7 +96,7 @@ static bool _pam_cred_established;
 static sig_atomic_t volatile caught_signal = false;
 static pam_handle_t *pamh = NULL;
 
-static struct passwd *
+static const struct passwd *
 current_getpwuid (void)
 {
   uid_t ruid;
@@ -119,7 +119,7 @@ current_getpwuid (void)
    if SUCCESSFUL is true, they gave the correct password, etc.  */
 
 static void
-log_syslog (struct passwd const *pw, bool successful)
+log_syslog (struct passwd const * const pw, const bool successful)
 {
   const char *new_user, *old_user, *tty;
 
@@ -132,7 +132,7 @@ log_syslog (struct passwd const *pw, bool successful)
   {
     /* getlogin can fail -- usually due to lack of utmp entry.
        Resort to getpwuid.  */
-    struct passwd *pwd = current_getpwuid();
+    const struct passwd *pwd = current_getpwuid();
     old_user = pwd ? pwd->pw_name : "";
   }
 
@@ -148,9 +148,9 @@ log_syslog (struct passwd const *pw, bool successful)
 
 /* Log failed login attempts in _PATH_BTMP if that exists.  */
 
-static void log_btmp (struct passwd const *pw)
+static void log_btmp (struct passwd const * const pw)
 {
-  struct utmp ut;
+  struct utmpx ut;
   struct timeval tv;
   const char *tty_name, *tty_num;
 
@@ -166,21 +166,13 @@ static void log_btmp (struct passwd const *pw)
   if( tty_name )
     xstrncpy( ut.ut_line, tty_name, sizeof(ut.ut_line) );
 
-#if defined(_HAVE_UT_TV)  /* in <utmpbits.h> included by <utmp.h> */
   gettimeofday( &tv, NULL );
   ut.ut_tv.tv_sec = tv.tv_sec;
   ut.ut_tv.tv_usec = tv.tv_usec;
-#else
-  {
-    time_t t;
-    time( &t );
-    ut.ut_time = t; /* ut_time is not always a time_t */
-  }
-#endif
   ut.ut_type = LOGIN_PROCESS; /* XXX doesn't matter */
   ut.ut_pid = getpid();
 
-  updwtmp( _PATH_BTMP, &ut );
+  updwtmpx( _PATH_BTMP, &ut );
 }
 
 
@@ -201,9 +193,9 @@ static struct pam_conv conv =
 };
 
 static void
-cleanup_pam (int retcode)
+cleanup_pam (const int retcode)
 {
-  int saved_errno = errno;
+  const int saved_errno = errno;
 
   if( _pam_session_opened )
     pam_close_session( pamh, 0 );
@@ -246,9 +238,8 @@ create_watching_parent (void)
   sigset_t ourset;
   struct sigaction oldact[3];
   int status = 0;
-  int retval;
+  const int retval = pam_open_session (pamh, 0);
 
-  retval = pam_open_session( pamh, 0 );
   if( is_pam_failure(retval) )
   {
     cleanup_pam( retval );
@@ -389,7 +380,7 @@ create_watching_parent (void)
 }
 
 static void
-authenticate (const struct passwd *pw)
+authenticate (const struct passwd * const pw)
 {
   const struct passwd *lpw = NULL;
   const char *cp, *srvname = NULL;
@@ -451,7 +442,7 @@ authenticate (const struct passwd *pw)
 }
 
 static void
-set_path (const struct passwd* pw)
+set_path (const struct passwd * const pw)
 {
   int r;
 
@@ -468,7 +459,7 @@ set_path (const struct passwd* pw)
    the value for the SHELL environment variable.  */
 
 static void
-modify_environment (const struct passwd *pw, const char *shell)
+modify_environment (const struct passwd * const pw, const char * const shell)
 {
   /* Leave TERM unchanged.  Set HOME, SHELL, USER, LOGNAME, PATH.
      Unset all other environment variables.  */
@@ -502,7 +493,7 @@ modify_environment (const struct passwd *pw, const char *shell)
 /* Become the user and group(s) specified by PW.  */
 
 static void
-init_groups (const struct passwd *pw, gid_t *groups, size_t num_groups)
+init_groups (const struct passwd * const pw, const gid_t * const groups, const size_t num_groups)
 {
   int retval;
 
@@ -529,7 +520,7 @@ init_groups (const struct passwd *pw, gid_t *groups, size_t num_groups)
 }
 
 static void
-change_identity (const struct passwd *pw)
+change_identity (const struct passwd * const pw)
 {
   if( setgid(pw->pw_gid) )
     err( EXIT_FAILURE,  _("cannot set group id") );
@@ -556,8 +547,8 @@ main (int argc, char **argv)
   size_t ngroups = 0;
 
   static const struct option longopts[] = {
-    {"help", no_argument, 0, 'h'},
-    {"version", no_argument, 0, 'V'},
+    {"help", no_argument, NULL, 'h'},
+    {"version", no_argument, NULL, 'V'},
     {NULL, 0, NULL, 0}
   };
 
@@ -589,7 +580,7 @@ main (int argc, char **argv)
         exit( EXIT_SUCCESS );
 
       default:
-        exit( EXIT_FAILURE );
+	    errtryhelp(EXIT_FAILURE);
     }
   }
 
