@@ -1,3 +1,4 @@
+[DEPRECATED]
 # sudx
 Run bash shell as another user with D-Bus enabled, useful for running GUI/X applications that need D-Bus.<br />
 Sudx is modified from `SU` ([`util-linux`](https://www.kernel.org/pub/linux/utils/util-linux)).
